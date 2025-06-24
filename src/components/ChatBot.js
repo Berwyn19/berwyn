@@ -4,42 +4,60 @@ import { FaRobot, FaPaperPlane } from "react-icons/fa";
 export default function ChatBot() {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState([
-    { sender: "bot", text: "Hi there! Ask me anything about Berwyn!" }
+    { sender: "bot", text: "Hi there! Ask me anything!" }
   ]);
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef(null);
+  const ws = useRef(null);
+
+  const WS_URL = "wss://personal-backend-gel8.onrender.com/ws/chat";
+  // 👈 Local WebSocket URL
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const sendMessage = async () => {
+  const sendMessage = () => {
     if (!input.trim()) return;
 
     setMessages(prev => [...prev, { sender: "user", text: input }]);
     setInput("");
     setLoading(true);
+    setMessages(prev => [...prev, { sender: "bot", text: "" }]);
 
-    try {
-      const res = await fetch(`${process.env.REACT_APP_API_URL}/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: input })
-      });
+    ws.current = new WebSocket(WS_URL);
 
-      const data = await res.json();
-      const reply =
-        data.response || "Sorry, I couldn't find any information about that.";
+    ws.current.onopen = () => {
+      ws.current.send(input);
+    };
 
-      setMessages(prev => [...prev, { sender: "bot", text: reply }]);
-    } catch (err) {
+    ws.current.onmessage = e => {
+        const token = e.data;
+        
+        if (token === "[DONE]") {
+          setLoading(false);
+          ws.current.close();
+          return;
+        }
+      
+        setMessages(prev => {
+          // Create new array with immutable updates
+          return prev.map((msg, index) => {
+            if (index === prev.length - 1 && msg.sender === "bot") {
+              return { ...msg, text: msg.text + token };
+            }
+            return msg;
+          });
+        });
+      };
+
+    ws.current.onerror = () => {
       setMessages(prev => [
         ...prev,
-        { sender: "bot", text: "⚠️ Server error. Please try again later." }
+        { sender: "bot", text: "⚠️ Connection error. Try again later." }
       ]);
-    } finally {
       setLoading(false);
-    }
+    };
   };
 
   const handleKeyDown = e => {
