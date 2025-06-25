@@ -11,45 +11,32 @@ export default function ChatBot() {
   const ws = useRef(null);
 
   const WS_URL = "wss://personal-backend-gel8.onrender.com/ws/chat";
-  // 👈 Local WebSocket URL
 
+  // Scroll to bottom when messages change
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const sendMessage = () => {
-    if (!input.trim()) return;
-
-    setMessages(prev => [...prev, { sender: "user", text: input }]);
-    setInput("");
-    setLoading(true);
-    setMessages(prev => [...prev, { sender: "bot", text: "" }]);
-
+  // Initialize WebSocket once on mount
+  useEffect(() => {
     ws.current = new WebSocket(WS_URL);
 
-    ws.current.onopen = () => {
-      ws.current.send(input);
-    };
-
     ws.current.onmessage = e => {
-        const token = e.data;
-        
-        if (token === "[DONE]") {
-          setLoading(false);
-          ws.current.close();
-          return;
-        }
-      
-        setMessages(prev => {
-          // Create new array with immutable updates
-          return prev.map((msg, index) => {
-            if (index === prev.length - 1 && msg.sender === "bot") {
-              return { ...msg, text: msg.text + token };
-            }
-            return msg;
-          });
-        });
-      };
+      const token = e.data;
+
+      if (token === "[DONE]") {
+        setLoading(false);
+        return;
+      }
+
+      setMessages(prev =>
+        prev.map((msg, index) =>
+          index === prev.length - 1 && msg.sender === "bot"
+            ? { ...msg, text: msg.text + token }
+            : msg
+        )
+      );
+    };
 
     ws.current.onerror = () => {
       setMessages(prev => [
@@ -58,6 +45,22 @@ export default function ChatBot() {
       ]);
       setLoading(false);
     };
+
+    return () => {
+      ws.current?.close();
+    };
+  }, []);
+
+  const sendMessage = () => {
+    if (!input.trim() || ws.current.readyState !== WebSocket.OPEN) return;
+
+    const userMessage = { sender: "user", text: input };
+    const botPlaceholder = { sender: "bot", text: "" };
+
+    setMessages(prev => [...prev, userMessage, botPlaceholder]);
+    ws.current.send(input);
+    setInput("");
+    setLoading(true);
   };
 
   const handleKeyDown = e => {
